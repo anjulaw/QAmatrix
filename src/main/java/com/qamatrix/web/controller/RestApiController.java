@@ -334,32 +334,95 @@ public class RestApiController {
 
         return resultView;
     }
+	@RequestMapping(value = "/getDefectLeakage", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+    public ResultView<BugView> defectLeakage(@RequestParam(name = "fromDate") String fromDate, @RequestParam(name = "toDate") String toDate, @RequestParam(name = "project") String project){
 
-    @RequestMapping("/getDefectLeakage")
-    public BugView defectLeakage(@RequestParam(name="issuetype") String issuetype){
-        try{
+		ResultView resultView = new ResultView<>();
+        try {
 
-            final String defectsFoundUAT = "https://codegen.atlassian.net/rest/api/2/search?jql=createdDate >= 2017-01-01 AND createdDate <= 2017-01-31 AND  project  = \"Tour America\" AND level = EXTERNAL AND type in (\"Non-Prod Issue\")";
+			SimpleDateFormat sdf = new SimpleDateFormat("MM-dd-yy");
+			Date startDate = sdf.parse(fromDate);
+			Date endDate = sdf.parse(toDate);
 
-            final String defectsFoundQA = "https://codegen.atlassian.net/rest/api/2/search?jql=\"Project Ref\" in (TA) AND issuetype in (\"Local Issue\") AND createdDate >= 2017-01-01 AND createdDate <= 2017-01-31";
+			Calendar startCalendar = new GregorianCalendar();
+			startCalendar.setTime(startDate);
+			Calendar endCalendar = new GregorianCalendar();
+			endCalendar.setTime(endDate);
 
-            ResponseEntity<Bug> defectFoundUATResponse = resTemplate.exchange(defectsFoundUAT, HttpMethod.GET,qaMetrixHttpEntity, Bug.class);
-            Bug defectFoundUATObject = defectFoundUATResponse.getBody();
+			int diffYear = endCalendar.get(Calendar.YEAR) - startCalendar.get(Calendar.YEAR);
+			int diffMonth = diffYear * 12 + endCalendar.get(Calendar.MONTH) - startCalendar.get(Calendar.MONTH);
 
-            if(defectFoundUATObject !=null){
+			List<String> dateList = new ArrayList<>();
+			List<String> lables = new ArrayList<>();
+			SimpleDateFormat jiraDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
-                ResponseEntity<Bug> defectsFoundQAResponse = resTemplate.exchange(defectsFoundQA, HttpMethod.GET,qaMetrixHttpEntity, Bug.class);
-                Bug defectsFoundQAObject = defectsFoundQAResponse.getBody();
 
-                BugView bugViewDefectLeakage = CalculationUtils.calDefectLeakage(defectFoundUATObject,defectsFoundQAObject);
-                return bugViewDefectLeakage;
-            }
+			String date = jiraDateFormat.format(startDate);
+			dateList.add(date);
+
+			Date initialDate = startDate;
+			for (int i = 0; i < diffMonth+1; i++) {
+
+				lables.add(jiraDateFormat.format(initialDate));
+
+				Calendar c = Calendar.getInstance();
+				c.setTime(initialDate);
+				c.add(Calendar.MONTH, 1);  // number of days to add
+
+				initialDate = c.getTime();
+				String datex = jiraDateFormat.format(initialDate);
+				dateList.add(datex);
+
+			}
+
+			List<BugView> bugVierwList = new ArrayList<>();
+
+			for (int i = 0; i < dateList.size()-1; i++){
+
+				final String defectsFoundUAT = "https://codegen.atlassian.net/rest/api/2/search?jql=createdDate >= "+dateList.get(i)+" AND createdDate <= "+dateList.get(i+1)+" AND  project  = "+project+" AND level = EXTERNAL AND type in (\"Non-Prod Issue\")";
+				System.out.println("defectsFoundUAT URL "+defectsFoundUAT );
+
+				final String defectsFoundQA = "https://codegen.atlassian.net/rest/api/2/search?jql=\"Project Ref\" in ("+project+") AND issuetype in (\"Local Issue\") AND createdDate >= "+dateList.get(i)+" AND createdDate <= "+dateList.get(i+1)+"";
+				System.out.println("defectsFoundQA "+defectsFoundQA);
+
+				ResponseEntity<Bug> defectFoundUATResponse = resTemplate.exchange(defectsFoundUAT, HttpMethod.GET, qaMetrixHttpEntity, Bug.class);
+				Bug defectFoundUATObject = defectFoundUATResponse.getBody();
+
+				if (defectFoundUATObject != null) {
+
+					ResponseEntity<Bug> defectsFoundQAResponse = resTemplate.exchange(defectsFoundQA, HttpMethod.GET, qaMetrixHttpEntity, Bug.class);
+					Bug defectsFoundQAObject = defectsFoundQAResponse.getBody();
+
+					BugView bugViewDefectLeakage = CalculationUtils.calDefectLeakage(defectFoundUATObject, defectsFoundQAObject);
+
+					String lable = dateList.get(i);
+					bugViewDefectLeakage.setLables(lable);
+					ResultCount resultCount = new ResultCount();
+					resultCount.setDefectsFoundQACount(defectsFoundQAObject.getTotal());
+					resultCount.setDefectsFoundUATCount(defectFoundUATObject.getTotal());
+
+					bugViewDefectLeakage.setResultCount(resultCount);
+
+					bugVierwList.add(bugViewDefectLeakage);
+
+				}
+
+			}
+
+			for(BugView bugView :bugVierwList ){
+				System.out.println(bugView.getDefectLeackageRatio());
+			}
+
+			resultView.setStatus(WebConstants.SUCCESS);
+			resultView.setData(bugVierwList);
+			resultView.setLabels(lables);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return null;
+		return resultView;
     }
     
     @RequestMapping(value = "/getDefectSeverity", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)

@@ -13,6 +13,7 @@ public class ResultCount {
     private double defectWithSeverity;
     private double totalDefects;
 
+
     public double getDefectWithSeverity() {
         return defectWithSeverity;
     }
